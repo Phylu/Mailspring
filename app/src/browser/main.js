@@ -164,8 +164,22 @@ const parseCommandLine = argv => {
     if (path.resolve(arg) === resourcePath) {
       continue;
     }
-    if (arg.startsWith('mailto:') || arg.startsWith('mailspring:')) {
-      urlsToOpen.push(arg);
+
+    const mailtoUrl = new URL(arg);
+    if (mailtoUrl.protocol == 'mailto:' || mailtoUrl.protocol == 'mailspring:') {
+      if (mailtoUrl.pathname == '') {
+        // There is no mailto address configured. Therefore, we are expecting
+        // an attachment e.g. from nautilus-sendto in the form
+        // mailto:?attach=file://path/to/file.txt and attach it to an e-mail
+        mailtoUrl.searchParams.forEach((value, key) => {
+          if (key === "attach") {
+            // We need to strip the leading `file://` in order to detect the files
+            pathsToOpen.push(value.replace(/^file:\/\//, ""));
+          }
+        })
+      } else {
+        urlsToOpen.push(arg);
+      }
     } else if (arg[0] !== '-' && /[/|\\]/.test(arg)) {
       pathsToOpen.push(arg);
     }
