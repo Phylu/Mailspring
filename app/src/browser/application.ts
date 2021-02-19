@@ -189,13 +189,8 @@ export default class Application extends EventEmitter {
 
     this.openWindowsForTokenState();
 
-    if (pathsToOpen instanceof Array && pathsToOpen.length > 0) {
-      this.openComposerWithFiles(pathsToOpen);
-    }
-    if (urlsToOpen instanceof Array) {
-      for (const urlToOpen of urlsToOpen) {
-        this.openUrl(urlToOpen);
-      }
+    if (pathsToOpen instanceof Array && pathsToOpen.length > 0 || urlsToOpen instanceof Array && urlsToOpen.length > 0) {
+      this.openComposer(urlsToOpen, pathsToOpen);
     }
   }
 
@@ -232,7 +227,7 @@ export default class Application extends EventEmitter {
   // we close windows and log out, we need to wait for these processes to completely
   // exit and then delete the file. It's hard to tell when this happens, so we just
   // retry the deletion a few times.
-  deleteFileWithRetry(filePath, callback = () => {}, retries = 5) {
+  deleteFileWithRetry(filePath, callback = () => { }, retries = 5) {
     const callbackWithRetry = err => {
       if (err && err.message.indexOf('no such file') === -1) {
         console.log(`File Error: ${err.message} - retrying in 150msec`);
@@ -507,13 +502,13 @@ export default class Application extends EventEmitter {
       pathsToOpen.push(pathToOpen);
       clearTimeout(pathsTimeout);
       pathsTimeout = setTimeout(() => {
-        this.openComposerWithFiles(pathsToOpen);
+        this.openComposer(null, pathsToOpen);
         pathsToOpen = [];
       }, 250);
     });
 
     app.on('open-url', (event, urlToOpen) => {
-      this.openUrl(urlToOpen);
+      this.openComposer(urlToOpen, null);
       event.preventDefault();
     });
 
@@ -789,10 +784,8 @@ export default class Application extends EventEmitter {
     return false;
   };
 
-  // Open a mailto:// url.
-  //
-  openUrl(urlToOpen) {
-    const parts = url.parse(urlToOpen);
+  openComposer(urlsToOpen, pathsToOpen) {
+
     const main = this.windowManager.get(WindowManager.MAIN_WINDOW);
 
     if (!main) {
@@ -800,24 +793,27 @@ export default class Application extends EventEmitter {
       return;
     }
 
-    if (parts.protocol === 'mailto:') {
-      main.sendMessage('mailto', urlToOpen);
-    } else if (parts.protocol === 'mailspring:') {
-      if (parts.host === 'plugins') {
-        main.sendMessage('changePluginStateFromUrl', urlToOpen);
-      } else {
-        main.sendMessage('openThreadFromWeb', urlToOpen);
-      }
-    } else {
-      console.log(`Ignoring unknown URL type: ${urlToOpen}`);
-    }
-  }
+    const mailtoUrls = [];
 
-  openComposerWithFiles(pathsToOpen) {
-    const main = this.windowManager.get(WindowManager.MAIN_WINDOW);
-    if (main) {
-      main.sendMessage('mailfiles', pathsToOpen);
+    for (let urlToOpen of urlsToOpen) {
+      const parts = url.parse(urlToOpen);
+
+      if (parts.protocol === 'mailto:') {
+        mailtoUrls.push(urlToOpen);
+      } else if (parts.protocol === 'mailspring:') {
+        if (parts.host === 'plugins') {
+          main.sendMessage('changePluginStateFromUrl', urlToOpen);
+        } else {
+          main.sendMessage('openThreadFromWeb', urlToOpen);
+        }
+      } else {
+        console.log(`Ignoring unknown URL type: ${urlToOpen}`);
+      }
     }
+
+    const data = { mailtoUrls, pathsToOpen };
+    main.sendMessage('mailto', data);
+
   }
 
   // Opens up a new {MailspringWindow} to run specs within.

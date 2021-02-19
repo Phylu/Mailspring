@@ -67,8 +67,7 @@ class DraftStore extends MailspringStore {
 
     AppEnv.onBeforeUnload(this._onBeforeUnload);
 
-    ipcRenderer.on('mailto', this._onHandleMailtoLink);
-    ipcRenderer.on('mailfiles', this._onHandleMailFiles);
+    ipcRenderer.on('mailto', this._onHandleNewMail);
 
     setInterval(() => {
       // Slate is unable to properly clear it's caches, so we help it out
@@ -378,6 +377,40 @@ class DraftStore extends MailspringStore {
         onCreated: callback,
       });
     });
+  };
+
+  _onHandleNewMail = async (event, data) => {
+    // returned promise is just used for specs
+    const { mailtoUrls, pathsToOpen } = data;
+
+    let draft;
+    if (mailtoUrls && mailtoUrls.length > 0) {
+      draft = await DraftFactory.createDraftForMailto(mailtoUrls);
+    } else {
+      draft = await DraftFactory.createDraft();
+    }
+
+    try {
+      const { headerMessageId } = await this._finalizeAndPersistNewMessage(draft);
+
+      let remaining = pathsToOpen.length;
+      const callback = () => {
+        remaining -= 1;
+        if (remaining === 0) {
+          this._onPopoutDraft(headerMessageId);
+        }
+      };
+
+      pathsToOpen.forEach(path => {
+        Actions.addAttachment({
+          filePath: path,
+          headerMessageId: headerMessageId,
+          onCreated: callback,
+        });
+      });
+    } catch (err) {
+      AppEnv.showErrorDialog(err.toString());
+    }
   };
 
   _onDestroyDraft = ({ accountId, headerMessageId, id }) => {

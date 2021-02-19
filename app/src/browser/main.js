@@ -165,24 +165,25 @@ const parseCommandLine = argv => {
       continue;
     }
 
-    const mailtoUrl = new URL(arg);
-    if (mailtoUrl.protocol == 'mailto:' || mailtoUrl.protocol == 'mailspring:') {
-      if (mailtoUrl.pathname == '') {
-        // There is no mailto address configured. Therefore, we are expecting
-        // an attachment e.g. from nautilus-sendto in the form
-        // mailto:?attach=file://path/to/file.txt and attach it to an e-mail
+    try {
+      const mailtoUrl = new URL(arg);
+      if (mailtoUrl.protocol == 'mailto:' || mailtoUrl.protocol == 'mailspring:') {
+        // Parse links such as mailto:test@test.com?attach=file://path/to/file.txt
         mailtoUrl.searchParams.forEach((value, key) => {
-          if (key === "attach") {
+          if (key === 'attach') {
             // We need to strip the leading `file://` in order to detect the files
-            pathsToOpen.push(value.replace(/^file:\/\//, ""));
+            pathsToOpen.push(value.replace(/^file:\/\//, ''));
           }
         })
-      } else {
         urlsToOpen.push(arg);
       }
-    } else if (arg[0] !== '-' && /[/|\\]/.test(arg)) {
-      pathsToOpen.push(arg);
+    } catch (ERR_INVALID_URL) {
+      // If we don't have an URL, this maybe a file.
+      if (arg[0] !== '-' && /[/|\\]/.test(arg)) {
+        pathsToOpen.push(arg);
+      }
     }
+
   }
 
   if (args['path-environment']) {
